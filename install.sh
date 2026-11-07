@@ -193,7 +193,7 @@ systemctl restart slyber_sfu
 sleep 1
 
 echo "[INFO] Running self-diagnostics..."
-(cd "${INSTALL_DIR}" && "${BIN_PATH}" doctor) || true
+(cd "${INSTALL_DIR}" && set -a && . "${INSTALL_DIR}/.env" && set +a && "${BIN_PATH}" doctor) || true
 
 CURRENT_TURN_SECRET="$(grep '^TURN_SECRET=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"')"
 CURRENT_NODE_SECRET="$(grep '^NODE_SECRET=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"')"
