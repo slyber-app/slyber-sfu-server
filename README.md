@@ -33,17 +33,15 @@ sudo slyber_sfu doctor
 ### 2. Run with Docker
 
 ```bash
+docker rm -f slyber-sfu 2>/dev/null || true && \
 docker run -d \
   --name slyber-sfu \
   --network host \
   --restart unless-stopped \
-  -e PUBLIC_IP="203.0.113.10" \
-  -e REALM="slyber.com" \
+  -e REALM="example.com" \
   -e AUTH_MODE="secret" \
-  -e TURN_SECRET="your-turn-hmac-secret" \
-  -e JWT_SECRET="your-room-jwt-secret" \
-  -e NODE_SECRET="your-node-admin-secret" \
-  ghcr.io/slyber-app/slyber-sfu-server:latest
+  ghcr.io/slyber-app/slyber-sfu-server:latest \
+  && sleep 1 && docker logs slyber-sfu
 ```
 
 ### 3. Run with Docker Compose
