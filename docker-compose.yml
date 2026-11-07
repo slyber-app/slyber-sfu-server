@@ -1,0 +1,33 @@
+services:
+  slyber-sfu:
+    image: ghcr.io/slyber-app/slyber-sfu-server:latest
+    container_name: slyber-sfu-server
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      SFU_NODE_ID: "slyber-sfu-01"
+      PUBLIC_IP: "${PUBLIC_IP:-127.0.0.1}"
+      REALM: "${REALM:-slyber.com}"
+      SFU_UDP_PORT: "443"
+      SFU_TCP_PORT: "443"
+      SFU_HTTP_PORT: "8090"
+      SO_REUSEPORT_WORKERS: "4"
+      ENABLE_ICE_TCP: "true"
+      ENABLE_QUIC: "true"
+      TURN_MODE: "both"
+      AUTH_MODE: "${AUTH_MODE:-secret}"
+      TURN_SECRET: "${TURN_SECRET:-}"
+      JWT_SECRET: "${JWT_SECRET:-}"
+      NODE_SECRET: "${NODE_SECRET:-}"
+      CREDENTIAL_TTL_SEC: "3600"
+      REDIS_ADDR: "${REDIS_ADDR:-127.0.0.1:6379}"
+      MAX_KBPS_PER_TRACK: "3500"
+      MAX_KBPS_PER_SESSION: "10000"
+      DEFAULT_ROOM_PROFILE: "conference"
+      ENABLE_SIMULCAST: "true"
+      ENABLE_SVC: "true"
+      ENABLE_WHIP_WHEP: "true"
+      ENABLE_MOQ_RELAY: "true"
+      ENABLE_AI_GATEWAY: "true"
+      ENABLE_CASCADE_PIPE: "true"
+      ENABLE_INSPECTOR: "true"
