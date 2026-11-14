@@ -5,7 +5,7 @@ ARG VERSION=latest
 ARG VCS_REF=unknown
 
 LABEL org.opencontainers.image.title="Slyber SFU Server" \
-      org.opencontainers.image.description="High-Performance Single-Port WebRTC SFU, Embedded TURN, WHIP/WHEP, QUIC/MoQ & AI Media Server" \
+      org.opencontainers.image.description="High-Performance Pion WebRTC v4 SFU, Single-Port ICE-Lite UDP/TCP Mux, Simulcast/SVC, WHIP/WHEP, SFrame E2EE & AI Voice Pipe" \
       org.opencontainers.image.source="https://github.com/slyber-app/slyber-sfu-server" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${VCS_REF}"
@@ -26,18 +26,32 @@ RUN grep " slyber_sfu-linux-${TARGETARCH}\$" /tmp/SHA256SUMS | awk '{print $1 " 
 
 WORKDIR /data
 
-ENV SFU_NODE_ID="slyber-sfu-01" \
+ENV SFU_ENV="production" \
+    SFU_NODE_ID="slyber-sfu-01" \
     REALM="slyber.com" \
-    SFU_UDP_PORT="443" \
-    SFU_TCP_PORT="443" \
+    DEFAULT_ROOM_PROFILE="conference" \
+    SFU_UDP_PORT="4443" \
+    SFU_TCP_PORT="4443" \
     SFU_HTTP_PORT="8090" \
-    SO_REUSEPORT_WORKERS="4" \
     ENABLE_ICE_TCP="true" \
-    ENABLE_QUIC="true" \
-    TURN_MODE="both" \
-    AUTH_MODE="secret"
+    ALLOW_PORT_FALLBACK="false" \
+    SOCKET_BUFFER_BYTES="8388608" \
+    AUTH_MODE="jwt" \
+    CREDENTIAL_TTL_SEC="3600" \
+    REQUIRE_E2EE="false" \
+    ENABLE_SIMULCAST="true" \
+    ENABLE_SVC="true" \
+    VIDEO_CODECS="VP9,AV1,H264,VP8" \
+    NACK_BUFFER_SIZE="512" \
+    LAST_N_VIDEO_LIMIT="16" \
+    DYNACAST_ENABLED="true" \
+    ENABLE_WHIP_WHEP="true" \
+    ENABLE_MOQ_RELAY="false" \
+    ENABLE_AI_GATEWAY="true" \
+    ENABLE_CASCADE_PIPE="true" \
+    ENABLE_INSPECTOR="true"
 
-EXPOSE 443/udp 443/tcp 8090/tcp
+EXPOSE 4443/udp 4443/tcp 8090/tcp
 
 VOLUME ["/data"]
 

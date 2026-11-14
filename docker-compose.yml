@@ -4,30 +4,62 @@ services:
     container_name: slyber-sfu-server
     restart: unless-stopped
     network_mode: host
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
     environment:
-      SFU_NODE_ID: "slyber-sfu-01"
-      PUBLIC_IP: "${PUBLIC_IP:-127.0.0.1}"
+      SFU_ENV: "${SFU_ENV:-production}"
+      SFU_NODE_ID: "${SFU_NODE_ID:-slyber-sfu-01}"
+      PUBLIC_IP: "${PUBLIC_IP:?Set PUBLIC_IP in .env}"
       REALM: "${REALM:-slyber.com}"
-      SFU_UDP_PORT: "443"
-      SFU_TCP_PORT: "443"
-      SFU_HTTP_PORT: "8090"
-      SO_REUSEPORT_WORKERS: "4"
-      ENABLE_ICE_TCP: "true"
-      ENABLE_QUIC: "true"
-      TURN_MODE: "both"
-      AUTH_MODE: "${AUTH_MODE:-secret}"
+      DEFAULT_ROOM_PROFILE: "${DEFAULT_ROOM_PROFILE:-conference}"
+
+      SFU_UDP_PORT: "${SFU_UDP_PORT:-4443}"
+      SFU_TCP_PORT: "${SFU_TCP_PORT:-4443}"
+      SFU_HTTP_PORT: "${SFU_HTTP_PORT:-8090}"
+      ENABLE_ICE_TCP: "${ENABLE_ICE_TCP:-true}"
+      ALLOW_PORT_FALLBACK: "${ALLOW_PORT_FALLBACK:-false}"
+      SOCKET_BUFFER_BYTES: "${SOCKET_BUFFER_BYTES:-8388608}"
+
+      EXTERNAL_TURN_URLS: "${EXTERNAL_TURN_URLS:-}"
+
+      AUTH_MODE: "${AUTH_MODE:-jwt}"
+      JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET (min 24 chars) in .env}"
+      NODE_SECRET: "${NODE_SECRET:?Set NODE_SECRET (min 24 chars) in .env}"
       TURN_SECRET: "${TURN_SECRET:-}"
-      JWT_SECRET: "${JWT_SECRET:-}"
-      NODE_SECRET: "${NODE_SECRET:-}"
-      CREDENTIAL_TTL_SEC: "3600"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-https://slyber.com}"
+      ALLOW_INTERNAL_CASCADE: "${ALLOW_INTERNAL_CASCADE:-false}"
+      CREDENTIAL_TTL_SEC: "${CREDENTIAL_TTL_SEC:-3600}"
+      REQUIRE_E2EE: "${REQUIRE_E2EE:-false}"
+
       REDIS_ADDR: "${REDIS_ADDR:-127.0.0.1:6379}"
-      MAX_KBPS_PER_TRACK: "3500"
-      MAX_KBPS_PER_SESSION: "10000"
-      DEFAULT_ROOM_PROFILE: "conference"
-      ENABLE_SIMULCAST: "true"
-      ENABLE_SVC: "true"
-      ENABLE_WHIP_WHEP: "true"
-      ENABLE_MOQ_RELAY: "true"
-      ENABLE_AI_GATEWAY: "true"
-      ENABLE_CASCADE_PIPE: "true"
-      ENABLE_INSPECTOR: "true"
+      REDIS_USERNAME: "${REDIS_USERNAME:-}"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+      REDIS_DB: "${REDIS_DB:-0}"
+
+      MAX_KBPS_PER_TRACK: "${MAX_KBPS_PER_TRACK:-3500}"
+      MAX_KBPS_PER_SESSION: "${MAX_KBPS_PER_SESSION:-10000}"
+      ENABLE_SIMULCAST: "${ENABLE_SIMULCAST:-true}"
+      ENABLE_SVC: "${ENABLE_SVC:-true}"
+      VIDEO_CODECS: "${VIDEO_CODECS:-VP9,AV1,H264,VP8}"
+      NACK_BUFFER_SIZE: "${NACK_BUFFER_SIZE:-512}"
+      LAST_N_VIDEO_LIMIT: "${LAST_N_VIDEO_LIMIT:-16}"
+      DYNACAST_ENABLED: "${DYNACAST_ENABLED:-true}"
+
+      ENABLE_WHIP_WHEP: "${ENABLE_WHIP_WHEP:-true}"
+      ENABLE_MOQ_RELAY: "${ENABLE_MOQ_RELAY:-false}"
+      ENABLE_AI_GATEWAY: "${ENABLE_AI_GATEWAY:-true}"
+      ENABLE_CASCADE_PIPE: "${ENABLE_CASCADE_PIPE:-true}"
+      ENABLE_INSPECTOR: "${ENABLE_INSPECTOR:-true}"

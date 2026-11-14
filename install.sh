@@ -96,36 +96,43 @@ if [ ! -f "${INSTALL_DIR}/.env" ]; then
     GENERATED_JWT_SECRET="${JWT_SECRET:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 32)}"
     GENERATED_NODE_SECRET="${NODE_SECRET:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 32)}"
 
+    CONF_ENV="${SFU_ENV:-production}"
+    if [ "${DETECTED_IP}" = "127.0.0.1" ] || [ -z "${DETECTED_IP}" ]; then
+        CONF_ENV="development"
+    fi
+
     CONF_NODE_ID="${SFU_NODE_ID:-slyber-sfu-01}"
     CONF_PUBLIC_IP="${PUBLIC_IP:-${DETECTED_IP}}"
-    CONF_REALM="${REALM:-slyber.local}"
-    CONF_UDP_PORT="${SFU_UDP_PORT:-443}"
-    CONF_TCP_PORT="${SFU_TCP_PORT:-443}"
+    CONF_REALM="${REALM:-slyber.com}"
+    CONF_UDP_PORT="${SFU_UDP_PORT:-4443}"
+    CONF_TCP_PORT="${SFU_TCP_PORT:-4443}"
     CONF_HTTP_PORT="${SFU_HTTP_PORT:-8090}"
-    CONF_WORKERS="${SO_REUSEPORT_WORKERS:-4}"
-    CONF_AUTH_MODE="${AUTH_MODE:-secret}"
+    CONF_AUTH_MODE="${AUTH_MODE:-jwt}"
     CONF_REDIS_ADDR="${REDIS_ADDR:-127.0.0.1:6379}"
     CONF_REDIS_USERNAME="${REDIS_USERNAME:-}"
     CONF_REDIS_PASSWORD="${REDIS_PASSWORD:-}"
     CONF_REDIS_DB="${REDIS_DB:-0}"
 
     cat > "${INSTALL_DIR}/.env" <<EOF
+SFU_ENV="${CONF_ENV}"
 SFU_NODE_ID="${CONF_NODE_ID}"
 PUBLIC_IP="${CONF_PUBLIC_IP}"
 REALM="${CONF_REALM}"
+DEFAULT_ROOM_PROFILE="conference"
 SFU_UDP_PORT=${CONF_UDP_PORT}
 SFU_TCP_PORT=${CONF_TCP_PORT}
 SFU_HTTP_PORT=${CONF_HTTP_PORT}
-SO_REUSEPORT_WORKERS=${CONF_WORKERS}
 ENABLE_ICE_TCP=true
-ENABLE_QUIC=true
-TURN_MODE="both"
+ALLOW_PORT_FALLBACK=false
+SOCKET_BUFFER_BYTES=8388608
+EXTERNAL_TURN_URLS=""
 AUTH_MODE="${CONF_AUTH_MODE}"
-TURN_SECRET="${GENERATED_TURN_SECRET}"
 JWT_SECRET="${GENERATED_JWT_SECRET}"
 NODE_SECRET="${GENERATED_NODE_SECRET}"
+TURN_SECRET="${GENERATED_TURN_SECRET}"
+ALLOWED_ORIGINS="https://slyber.com"
+ALLOW_INTERNAL_CASCADE=false
 CREDENTIAL_TTL_SEC=3600
-REQUIRE_SRTP=false
 REQUIRE_E2EE=false
 REDIS_ADDR="${CONF_REDIS_ADDR}"
 REDIS_USERNAME="${CONF_REDIS_USERNAME}"
@@ -133,11 +140,14 @@ REDIS_PASSWORD="${CONF_REDIS_PASSWORD}"
 REDIS_DB=${CONF_REDIS_DB}
 MAX_KBPS_PER_TRACK=3500
 MAX_KBPS_PER_SESSION=10000
-DEFAULT_ROOM_PROFILE="conference"
 ENABLE_SIMULCAST=true
 ENABLE_SVC=true
+VIDEO_CODECS="VP9,AV1,H264,VP8"
+NACK_BUFFER_SIZE=512
+LAST_N_VIDEO_LIMIT=16
+DYNACAST_ENABLED=true
 ENABLE_WHIP_WHEP=true
-ENABLE_MOQ_RELAY=true
+ENABLE_MOQ_RELAY=false
 ENABLE_AI_GATEWAY=true
 ENABLE_CASCADE_PIPE=true
 ENABLE_INSPECTOR=true
@@ -150,22 +160,26 @@ fi
 
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}"
 
+USED_UDP_PORT="$(grep '^SFU_UDP_PORT=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"' || echo 4443)"
+USED_TCP_PORT="$(grep '^SFU_TCP_PORT=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"' || echo 4443)"
+USED_HTTP_PORT="$(grep '^SFU_HTTP_PORT=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"' || echo 8090)"
+
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
     echo "[INFO] Applying UFW firewall rules..."
-    ufw allow 443/udp >/dev/null 2>&1 || true
-    ufw allow 443/tcp >/dev/null 2>&1 || true
-    ufw allow 8090/tcp >/dev/null 2>&1 || true
+    ufw allow "${USED_UDP_PORT}/udp" >/dev/null 2>&1 || true
+    ufw allow "${USED_TCP_PORT}/tcp" >/dev/null 2>&1 || true
+    ufw allow "${USED_HTTP_PORT}/tcp" >/dev/null 2>&1 || true
 elif command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld; then
     echo "[INFO] Applying firewalld rules..."
-    firewall-cmd --permanent --add-port=443/udp >/dev/null 2>&1 || true
-    firewall-cmd --permanent --add-port=443/tcp >/dev/null 2>&1 || true
-    firewall-cmd --permanent --add-port=8090/tcp >/dev/null 2>&1 || true
+    firewall-cmd --permanent --add-port="${USED_UDP_PORT}/udp" >/dev/null 2>&1 || true
+    firewall-cmd --permanent --add-port="${USED_TCP_PORT}/tcp" >/dev/null 2>&1 || true
+    firewall-cmd --permanent --add-port="${USED_HTTP_PORT}/tcp" >/dev/null 2>&1 || true
     firewall-cmd --reload >/dev/null 2>&1 || true
 fi
 
 cat > "${SERVICE_FILE}" <<EOF
 [Unit]
-Description=Slyber SFU Server (Single-Port WebRTC SFU, TURN, WHIP/WHEP & MoQ)
+Description=Slyber SFU Server (Pion WebRTC v4 Single-Port SFU, WHIP/WHEP, AI Voice Pipe & MoQ)
 After=network-online.target
 Wants=network-online.target
 
@@ -195,12 +209,14 @@ sleep 1
 echo "[INFO] Running self-diagnostics..."
 (cd "${INSTALL_DIR}" && set -a && . "${INSTALL_DIR}/.env" && set +a && "${BIN_PATH}" doctor) || true
 
+CURRENT_JWT_SECRET="$(grep '^JWT_SECRET=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"')"
 CURRENT_TURN_SECRET="$(grep '^TURN_SECRET=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"')"
 CURRENT_NODE_SECRET="$(grep '^NODE_SECRET=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"')"
 echo ""
 echo "[OK] Slyber SFU Server is installed and running."
 echo "  Service     : systemctl status slyber_sfu (user: ${SERVICE_USER})"
 echo "  Config file : ${INSTALL_DIR}/.env"
+echo "  JWT Secret  : ${CURRENT_JWT_SECRET}"
 echo "  TURN Secret : ${CURRENT_TURN_SECRET}"
 echo "  Node Secret : ${CURRENT_NODE_SECRET}"
 echo "  Diagnostics : sudo slyber_sfu doctor"
