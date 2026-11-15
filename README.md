@@ -23,7 +23,7 @@ High performance WebRTC Selective Forwarding Unit (SFU) built with Go and Pion W
 Install the precompiled static binary (`amd64` / `arm64`), apply kernel UDP buffer tuning (`8 MB`), generate isolated cryptographic secrets in `/opt/slyber_sfu/.env`, and start the `slyber_sfu` systemd service:
 
 ```bash
-curl -fsSL [https://raw.githubusercontent.com/slyber-app/slyber-sfu-server/main/install.sh](https://raw.githubusercontent.com/slyber-app/slyber-sfu-server/main/install.sh) | sudo bash
+curl -fsSL https://raw.githubusercontent.com/slyber-app/slyber-sfu-server/main/install.sh | sudo bash
 ```
 
 Check service health and run self-diagnostics:
@@ -42,34 +42,34 @@ docker pull ghcr.io/slyber-app/slyber-sfu-server:latest
 docker rm -f slyber-sfu-server 2>/dev/null || true
 
 PUBLIC_IP=$(curl -fsSL4 --max-time 2 api.ipify.org 2>/dev/null || echo 127.0.0.1)
-TURN_SECRET=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 32)
-JWT_SECRET=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 32)
-NODE_SECRET=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 32)
+JWT_SECRET=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+NODE_SECRET=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
 
 docker run -d \
   --name slyber-sfu-server \
   --restart unless-stopped \
-  -p 4443:4443/udp \
-  -p 4443:4443/tcp \
-  -p 8090:8090/tcp \
+  --network host \
   -e SFU_ENV="production" \
   -e PUBLIC_IP="${PUBLIC_IP}" \
-  -e REALM="slyber.com" \
   -e SFU_UDP_PORT="4443" \
   -e SFU_TCP_PORT="4443" \
   -e SFU_HTTP_PORT="8090" \
   -e AUTH_MODE="jwt" \
-  -e TURN_SECRET="${TURN_SECRET}" \
   -e JWT_SECRET="${JWT_SECRET}" \
   -e NODE_SECRET="${NODE_SECRET}" \
-  ghcr.io/slyber-app/slyber-sfu-server:latest \
-  && sleep 1 && docker exec slyber-sfu-server slyber_sfu doctor
+  ghcr.io/slyber-app/slyber-sfu-server:latest && \
+  sleep 1 && \
+  docker exec slyber-sfu-server slyber_sfu doctor && \
+  echo "Public IP  : ${PUBLIC_IP}" && \
+  echo "JWT Secret : ${JWT_SECRET}" && \
+  echo "Node Secret: ${NODE_SECRET}" && \
+  echo "Test Token : $(curl -fsS -H "X-Slyber-Node-Secret: ${NODE_SECRET}" "http://127.0.0.1:8090/auth/token?room=test-room&user=user-1")"
 ```
 
 ### 3. Run with Docker Compose
 
 ```bash
-curl -fsSLO [https://raw.githubusercontent.com/slyber-app/slyber-sfu-server/main/docker-compose.yml](https://raw.githubusercontent.com/slyber-app/slyber-sfu-server/main/docker-compose.yml)
+curl -fsSLO https://raw.githubusercontent.com/slyber-app/slyber-sfu-server/main/docker-compose.yml
 PUBLIC_IP="203.0.113.10" \
 JWT_SECRET="your-24-char-production-jwt-secret" \
 NODE_SECRET="your-24-char-production-node-secret" \
@@ -90,7 +90,7 @@ Generate a ready-to-use JWT, TURN HMAC token, and external ICE server list using
 
 ```bash
 curl -s -H "X-Slyber-Node-Secret: <your-node-secret>" \
-  "[http://127.0.0.1:8090/auth/token?room=main-hall&user=alice](http://127.0.0.1:8090/auth/token?room=main-hall&user=alice)"
+  "http://127.0.0.1:8090/auth/token?room=main-hall&user=alice"
 ```
 
 ---
@@ -163,11 +163,11 @@ All parameters can be configured via environment variables (`.env`) or CLI flags
 To stop the service and remove the binary while preserving `/opt/slyber_sfu/.env`:
 
 ```bash
-curl -fsSL [https://raw.githubusercontent.com/slyber-app/slyber-sfu-server/main/uninstall.sh](https://raw.githubusercontent.com/slyber-app/slyber-sfu-server/main/uninstall.sh) | sudo bash
+curl -fsSL https://raw.githubusercontent.com/slyber-app/slyber-sfu-server/main/uninstall.sh | sudo bash
 ```
 
 To completely remove all configuration files and the `slyber_sfu` system user:
 
 ```bash
-curl -fsSL [https://raw.githubusercontent.com/slyber-app/slyber-sfu-server/main/uninstall.sh](https://raw.githubusercontent.com/slyber-app/slyber-sfu-server/main/uninstall.sh) | sudo env PURGE_DATA=true bash
+curl -fsSL https://raw.githubusercontent.com/slyber-app/slyber-sfu-server/main/uninstall.sh | sudo env PURGE_DATA=true bash
 ```
