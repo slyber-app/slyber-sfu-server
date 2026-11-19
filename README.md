@@ -42,6 +42,7 @@ docker pull ghcr.io/slyber-app/slyber-sfu-server:latest
 docker rm -f slyber-sfu-server 2>/dev/null || true
 
 PUBLIC_IP=$(curl -fsSL4 --max-time 2 api.ipify.org 2>/dev/null || echo 127.0.0.1)
+SFU_ENV=$([ "${PUBLIC_IP}" = "127.0.0.1" ] && echo "development" || echo "production")
 JWT_SECRET=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
 NODE_SECRET=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
 
@@ -49,7 +50,7 @@ docker run -d \
   --name slyber-sfu-server \
   --restart unless-stopped \
   --network host \
-  -e SFU_ENV="production" \
+  -e SFU_ENV="${SFU_ENV}" \
   -e PUBLIC_IP="${PUBLIC_IP}" \
   -e SFU_UDP_PORT="4443" \
   -e SFU_TCP_PORT="4443" \
@@ -84,9 +85,9 @@ docker compose up -d
 
 1. **`jwt` (HS256, default)**: Verifies JSON Web Tokens signed with `JWT_SECRET` containing `sub`, `room_id`, non-zero `exp`, room `profile`, E2EE requirements, and per-track capabilities (`can_publish`, `can_subscribe`, `max_spatial_layer`, `max_bitrate_kbps`).
 2. **`redis`**: Validates active session tokens against Redis keys (`slyber:session:<token>`) using a persistent connection pool with RESP injection protection and automatic retry.
-3. **`secret` (HMAC-SHA1)**: Validates time-limited credentials formatted as `expires_at:participant_id:base64_hmac` signed with `TURN_SECRET`.
+3. **`secret` (HMAC-SHA1)**: Validates time-limited session credentials formatted as `expires_at:participant_id:base64_hmac` signed with `HMAC_SECRET`.
 
-Generate a ready-to-use JWT, TURN HMAC token, and external ICE server list using your `NODE_SECRET`:
+Generate a ready-to-use room JWT and HMAC-SHA1 session token using your `NODE_SECRET`:
 
 ```bash
 curl -s -H "X-Slyber-Node-Secret: <your-node-secret>" \
@@ -112,10 +113,9 @@ All parameters can be configured via environment variables (`.env`) or CLI flags
 | `ENABLE_ICE_TCP` | `-enable-ice-tcp` | `true` | Enable RFC 4571 ICE-TCP multiplexer |
 | `ALLOW_PORT_FALLBACK` | `-allow-port-fallback` | `false` | Automatically select the next free port if busy |
 | `SOCKET_BUFFER_BYTES` | `-socket-buffer` | `8388608` | OS UDP socket read/write buffer size in bytes (`8 MB`) |
-| `EXTERNAL_TURN_URLS` | `-external-turn-urls` | - | Comma-separated external TURN server URLs |
 | `AUTH_MODE` | `-auth-mode` | `jwt` | Session authentication mode (`jwt`, `redis`, `secret`) |
 | `JWT_SECRET` | `-jwt-secret` | auto-generated (dev) | HMAC-SHA256 secret for room JWT tokens (min 24 chars in prod) |
-| `TURN_SECRET` | `-turn-secret` | auto-generated (dev) | Shared HMAC-SHA1 secret for external TURN and `secret` auth |
+| `HMAC_SECRET` | `-hmac-secret` | auto-generated (dev) | HMAC-SHA1 secret for session tokens in `secret` auth mode (min 24 chars in prod) |
 | `NODE_SECRET` | `-node-secret` | auto-generated (dev) | Dedicated admin secret for `/auth/token`, `/ai`, `/cascade`, `/metrics` |
 | `ALLOWED_ORIGINS` | `-allowed-origins` | `https://slyber.com` | Comma-separated allowed WebSocket and CORS origins |
 | `ALLOW_INTERNAL_CASCADE` | `-allow-internal-cascade` | `false` | Allow loopback/RFC1918 IPs in inter-node cascade pipe |
@@ -145,7 +145,7 @@ All parameters can be configured via environment variables (`.env`) or CLI flags
 
 - **`GET /ws`**: WebSocket signaling gateway (`join`, `offer`, `answer`, `trickle_ice`, `publish_track`, `subscribe_track`, `set_layer`, `roulette_swap`, `e2ee_key_ratchet`, `leave`).
 - **`POST /signaling`**: Stateless HTTP JSON signaling endpoint.
-- **`GET /auth/token`**: Generates development JWTs, TURN HMAC tokens, and ICE server configs (requires `X-Slyber-Node-Secret`).
+- **`GET /auth/token`**: Generates development room JWTs and HMAC-SHA1 session tokens (requires `X-Slyber-Node-Secret`).
 - **`POST | PATCH | DELETE /whip/{room_id}/{track_id}`**: 1-RTT WHIP broadcast ingest endpoint with Trickle ICE and ETag owner protection.
 - **`POST | PATCH | DELETE /whep/{room_id}/{track_id}`**: 1-RTT WHEP viewer playback endpoint.
 - **`GET /ai/ws?room={room_id}&mode=mux`**: Full-duplex AI voice WebSocket supporting single and multiplexed multi-bot streams, 20ms Opus pacing, and RFC 6464 VAD barge-in queue flushing (requires `X-Slyber-Node-Secret`).

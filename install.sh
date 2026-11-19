@@ -92,7 +92,7 @@ echo "[OK] Installed binary to ${BIN_PATH} (symlinked to ${SYMLINK_PATH})"
 
 if [ ! -f "${INSTALL_DIR}/.env" ]; then
     DETECTED_IP="$(curl -4fsSL --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")"
-    GENERATED_TURN_SECRET="${TURN_SECRET:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 32)}"
+    GENERATED_HMAC_SECRET="${HMAC_SECRET:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 32)}"
     GENERATED_JWT_SECRET="${JWT_SECRET:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 32)}"
     GENERATED_NODE_SECRET="${NODE_SECRET:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 32)}"
 
@@ -125,11 +125,10 @@ SFU_HTTP_PORT=${CONF_HTTP_PORT}
 ENABLE_ICE_TCP=true
 ALLOW_PORT_FALLBACK=false
 SOCKET_BUFFER_BYTES=8388608
-EXTERNAL_TURN_URLS=""
 AUTH_MODE="${CONF_AUTH_MODE}"
 JWT_SECRET="${GENERATED_JWT_SECRET}"
+HMAC_SECRET="${GENERATED_HMAC_SECRET}"
 NODE_SECRET="${GENERATED_NODE_SECRET}"
-TURN_SECRET="${GENERATED_TURN_SECRET}"
 ALLOWED_ORIGINS="https://slyber.com"
 ALLOW_INTERNAL_CASCADE=false
 CREDENTIAL_TTL_SEC=3600
@@ -155,7 +154,14 @@ EOF
     chmod 600 "${INSTALL_DIR}/.env"
     echo "[OK] Created initial configuration in ${INSTALL_DIR}/.env"
 else
-    echo "[INFO] Existing configuration found at ${INSTALL_DIR}/.env (preserved)"
+    sed -i '/^EXTERNAL_TURN_URLS=/d' "${INSTALL_DIR}/.env"
+    if grep -q '^TURN_SECRET=' "${INSTALL_DIR}/.env" && ! grep -q '^HMAC_SECRET=' "${INSTALL_DIR}/.env"; then
+        sed -i 's/^TURN_SECRET=/HMAC_SECRET=/' "${INSTALL_DIR}/.env"
+        echo "[OK] Migrated TURN_SECRET to HMAC_SECRET in ${INSTALL_DIR}/.env"
+    else
+        sed -i '/^TURN_SECRET=/d' "${INSTALL_DIR}/.env"
+        echo "[INFO] Existing configuration found at ${INSTALL_DIR}/.env (preserved)"
+    fi
 fi
 
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}"
@@ -209,14 +215,14 @@ sleep 1
 echo "[INFO] Running self-diagnostics..."
 (cd "${INSTALL_DIR}" && set -a && . "${INSTALL_DIR}/.env" && set +a && "${BIN_PATH}" doctor) || true
 
-CURRENT_JWT_SECRET="$(grep '^JWT_SECRET=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"')"
-CURRENT_TURN_SECRET="$(grep '^TURN_SECRET=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"')"
-CURRENT_NODE_SECRET="$(grep '^NODE_SECRET=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"')"
+CURRENT_JWT_SECRET="$(grep '^JWT_SECRET=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"' || true)"
+CURRENT_HMAC_SECRET="$(grep '^HMAC_SECRET=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"' || true)"
+CURRENT_NODE_SECRET="$(grep '^NODE_SECRET=' "${INSTALL_DIR}/.env" | cut -d= -f2- | tr -d '"' || true)"
 echo ""
 echo "[OK] Slyber SFU Server is installed and running."
 echo "  Service     : systemctl status slyber_sfu (user: ${SERVICE_USER})"
 echo "  Config file : ${INSTALL_DIR}/.env"
 echo "  JWT Secret  : ${CURRENT_JWT_SECRET}"
-echo "  TURN Secret : ${CURRENT_TURN_SECRET}"
+echo "  HMAC Secret : ${CURRENT_HMAC_SECRET}"
 echo "  Node Secret : ${CURRENT_NODE_SECRET}"
 echo "  Diagnostics : sudo slyber_sfu doctor"
